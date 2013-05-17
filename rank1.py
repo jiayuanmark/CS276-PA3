@@ -11,14 +11,14 @@ weights = [1.0, 0.5, 0.1, 0.3, 2.0]
 ############# Task 2 Parameter #############
 W = [1.0, 0.5, 0.1, 0.3, 2.0]
 B = [0.3, 0.5, 2.0, 1.0, 0.1]
-K = 0.5
+K = 0.8
 lambda1 = 0.5
-lambda2 = 0.5
+lambda2 = 1.0
 lambda3 = 0.5
 
 ############# Task 3 Parameter #############
 weights_task3 = [1.0, 0.5, 0.1, 0.3, 2.0]
-Boost = 60.0
+Boost = 600.0
 
 ##################################
 
@@ -343,8 +343,8 @@ def boosted_weighted_score(dvecList, normalizer, qvec, window_size):
     score = vector_dot_product(rvec, qvec)
     if window_size == float("inf"):
         return score
-    elif len(qvec) == 1:
-        return score
+    #elif len(qvec) == 1:
+    #    return score
     elif window_size == len(qvec):
         return Boost * score
     else:
@@ -436,8 +436,8 @@ def main(featureFile):
 
     #calling baseline ranking system, replace with yours
     #rankedQueries = baseline(queries, features)
-    #rankedQueries = task1(queries, features, term_doc_freq)
-    rankedQueries = task2(queries, features, term_doc_freq)
+    rankedQueries = task1(queries, features, term_doc_freq)
+    #rankedQueries = task2(queries, features, term_doc_freq)
     #rankedQueries = task3(queries, features, term_doc_freq)
     print >> sys.stderr, sum([len(rankedQueries[u]) for u in rankedQueries])
     
