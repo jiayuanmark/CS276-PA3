@@ -1,6 +1,6 @@
 import sys
 import re
-from math import log10
+from math import log10, log
 import pickle
 
 #inparams
@@ -99,20 +99,22 @@ def sublinear_scale(vec):
         if u == 0:
             rvec.append(0)
         else:
-            rvec.append(1 + log10(u))
+            rvec.append(1 + log(u))
     return rvec
 
-def doc_freq_vec(items, doc_freq):
+def vector_doc_freq(items, doc_freq):
     vec = [0] * len(items)
     for idx in range(len(items)):
         vec[idx] = log10(doc_freq[items[idx]])
     return vec
 
 def weight_average(vecList, normalizer):
-    weights = [0.5, 0.5, 0.5, 1.0, 0.8]
+    #weights = [1.0, 0.3, 0.1, 0.3, 2.0]
+    weights = [1.0, 0.3, 0.1, 0.3, 2.0]
     rvec = [0] * len(vecList[0])
     for idx in range(len(vecList)):
-        rvec = vector_sum(rvec, vector_scale(sublinear_scale(vecList[idx]), float(weights[idx])/float(normalizer)))
+        #rvec = vector_sum(rvec, vector_scale(sublinear_scale(vecList[idx]), float(weights[idx])/float(normalizer)))
+        rvec = vector_sum(rvec, vector_scale(vecList[idx], float(weights[idx])/float(normalizer)))
     return rvec
         
 def task1(queries, features, doc_freq):
@@ -120,16 +122,18 @@ def task1(queries, features, doc_freq):
     for query in queries.keys():
         # Query item and query vector
         qitem = list(set(query.split()))
-        qvec = vector_from_text(qitem, query)
-        idf = doc_freq_vec(qitem, doc_freq)
+        qvec = sublinear_scale(vector_from_text(qitem, query))
+        #qvec = vector_from_text(qitem, query)
+        idf = vector_doc_freq(qitem, doc_freq)
         qvec = vector_product(qvec, idf)
+        
         # Calculate vectors and scores
         results = queries[query]
         feat = {}
         for x in results:
             # title
             title = features[query][x]['title']
-            title_vec = sublinear_scale(vector_from_text(qitem, title))
+            title_vec = vector_from_text(qitem, title)
             # url
             url = re.sub(r'\W+', ' ', x)
             url_vec = vector_from_text(qitem, url)
@@ -151,14 +155,55 @@ def task1(queries, features, doc_freq):
                 for key in anchor:
                     anchor_vec = vector_sum(anchor_vec, [anchor[key] * u for u in vector_from_text(qitem, key)])
             # length normalization
-            norm = features[query][x]['body_length'] + 500
+            norm = features[query][x]['body_length'] + 400
             dvec = weight_average([title_vec, header_vec, url_vec, body_vec, anchor_vec], norm)
             feat[x] = vector_dot_product(qvec, dvec)
         rankedQueries[query] = [u[0] for u in sorted(feat.items(), key=lambda x:x[1], reverse=True)]
     return rankedQueries
+
+def task2(queries, features, doc_freq):
+    rankedQueries = {}
+    for query in queries.keys():
+        # Query item and query vector
+        qitem = list(set(query.split()))
+        qvec = sublinear_scale(vector_from_text(qitem, query))
+        idf = vector_doc_freq(qitem, doc_freq)
+        qvec = vector_product(qvec, idf)
         
-
-
+        # Calculate vectors and scores
+        results = queries[query]
+        feat = {}
+        for x in results:
+            # title
+            title = features[query][x]['title']
+            title_vec = vector_from_text(qitem, title)
+            # url
+            url = re.sub(r'\W+', ' ', x)
+            url_vec = vector_from_text(qitem, url)
+            # header
+            header_vec = [0] * len(qitem)
+            if 'header' in features[query][x]:
+                header_arr = features[query][x]['header']
+                for header in header_arr:
+                    header_vec = vector_sum(header_vec, vector_from_text(qitem, header))
+            # body
+            body_vec = [0] * len(qitem)
+            if 'body_hits' in features[query][x]:
+                body = features[query][x]['body_hits']
+                body_vec = [len(body.setdefault(item, [])) for item in qitem]
+            # achors
+            anchor_vec = [0] * len(qitem)
+            if 'anchors' in features[query][x]:
+                anchor = features[query][x]['anchors']
+                for key in anchor:
+                    anchor_vec = vector_sum(anchor_vec, [anchor[key] * u for u in vector_from_text(qitem, key)])
+            # length normalization
+            norm = features[query][x]['body_length'] + 400
+            dvec = weight_average([title_vec, header_vec, url_vec, body_vec, anchor_vec], norm)
+            feat[x] = vector_dot_product(qvec, dvec)
+        rankedQueries[query] = [u[0] for u in sorted(feat.items(), key=lambda x:x[1], reverse=True)]
+    return rankedQueries
+    
 #inparams
 #  queries: contains ranked list of results for each query
 #  outputFile: output file name
@@ -190,6 +235,7 @@ def main(featureFile):
     #calling baseline ranking system, replace with yours
     #rankedQueries = baseline(queries, features)
     rankedQueries = task1(queries, features, term_doc_freq)
+    print >> sys.stderr, sum([len(rankedQueries[u]) for u in rankedQueries])
     
     #print ranked results to file
     #printRankedResults(rankedQueries)
