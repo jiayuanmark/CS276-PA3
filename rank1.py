@@ -9,8 +9,8 @@ import pickle
 weights = [1.0, 0.5, 0.1, 0.3, 2.0]
 
 ############# Task 2 Parameter #############
-W = [1.0, 0.3, 0.1, 0.3, 2.0]
-B = [1.0, 1.0, 1.0, 1.0, 1.0]
+W = [1.0, 0.5, 0.1, 0.3, 2.0]
+B = [0.3, 0.5, 2.0, 1.0, 0.1]
 K = 0.5
 lambda1 = 0.5
 lambda2 = 0.5
@@ -436,8 +436,8 @@ def main(featureFile):
 
     #calling baseline ranking system, replace with yours
     #rankedQueries = baseline(queries, features)
-    rankedQueries = task1(queries, features, term_doc_freq)
-    #rankedQueries = task2(queries, features, term_doc_freq)
+    #rankedQueries = task1(queries, features, term_doc_freq)
+    rankedQueries = task2(queries, features, term_doc_freq)
     #rankedQueries = task3(queries, features, term_doc_freq)
     print >> sys.stderr, sum([len(rankedQueries[u]) for u in rankedQueries])
     
