@@ -6,7 +6,7 @@ import pickle
 #[title, header, url, body, anchor]
 
 ############# Task 1 Parameter #############
-weights = [1.0, 0.3, 0.1, 0.3, 2.0]
+weights = [1.0, 0.5, 0.1, 0.3, 2.0]
 
 ############# Task 2 Parameter #############
 W = [1.0, 0.3, 0.1, 0.3, 2.0]
@@ -17,10 +17,8 @@ lambda2 = 0.5
 lambda3 = 0.5
 
 ############# Task 3 Parameter #############
-
-
-
-
+weights_task3 = [1.0, 0.5, 0.1, 0.3, 2.0]
+Boost = 60.0
 
 ##################################
 
@@ -177,7 +175,7 @@ def task1(queries, features, doc_freq):
                 for key in anchor:
                     anchor_vec = vector_sum(anchor_vec, [anchor[key] * u for u in vector_from_text(qitem, key)])
             # length normalization
-            norm = int(features[query][x]['body_length']) + 400
+            norm = int(features[query][x]['body_length']) + 500
             dvec = weight_average([title_vec, header_vec, url_vec, body_vec, anchor_vec], norm)
             feat[x] = vector_dot_product(qvec, dvec)
         rankedQueries[query] = [u[0] for u in sorted(feat.items(), key=lambda x:x[1], reverse=True)]
@@ -298,6 +296,61 @@ def task2(queries, features, doc_freq):
 
 
 ####################################### Task 3 ###############################################
+def compute_window(qitem, text):
+    if not set(text).issuperset(set(qitem)):
+        return float("inf")
+    if len(qitem) == 1:
+        return 1.0
+    index = [text.index(u) for u in qitem]
+    win = max(index) - min(index) + 1
+    for i in range(len(text)):
+        for j in range(len(qitem)):
+            if qitem[j] == text[i]:
+                index[j] = i
+                if max(index) - min(index) + 1 < win:
+                    win = max(index) - min(index) + 1
+                break
+    return win
+
+def compute_body_window(qitem, body):
+    if not set(body.keys()).issuperset(set(qitem)):
+        return float("inf")
+    if len(qitem) == 1:
+        return 1.0
+    d = {}
+    for key in body:
+        if key in qitem:
+            for pos in body[key]:
+                temp = d.setdefault(pos, [])
+                temp.append(key)
+                d[pos] = temp
+                
+    win = float("inf")
+    index = [float("inf")] * len(qitem)
+    for pos in d:
+        for word in d[pos]:
+            index[qitem.index(word)] = pos
+            if max(index) - min(index) + 1 < win:
+                win = max(index) - min(index) + 1
+    return win
+    
+def boosted_weighted_score(dvecList, normalizer, qvec, window_size):
+    global weights_task3
+    rvec = [0] * len(dvecList[0])
+    for idx in range(len(dvecList)):
+        #rvec = vector_sum(rvec, vector_scale(sublinear_scale(dvecList[idx]), float(weights_task3[idx])/float(normalizer)))
+        rvec = vector_sum(rvec, vector_scale(dvecList[idx], float(weights_task3[idx])/float(normalizer)))
+    score = vector_dot_product(rvec, qvec)
+    if window_size == float("inf"):
+        return score
+    elif len(qvec) == 1:
+        return score
+    elif window_size == len(qvec):
+        return Boost * score
+    else:
+        return float(Boost) / float(window_size) * float(score)
+
+
 def task3(queries, features, doc_freq):
     rankedQueries = {}
     for query in queries.keys():
@@ -315,30 +368,41 @@ def task3(queries, features, doc_freq):
             # title
             title = features[query][x]['title']
             title_vec = vector_from_text(qitem, title)
+            title_win = compute_window(qitem, title.split())
             # url
             url = re.sub(r'\W+', ' ', x)
             url_vec = vector_from_text(qitem, url)
+            url_win = compute_window(qitem, url.split())
             # header
             header_vec = [0] * len(qitem)
+            header_win = float("inf")
             if 'header' in features[query][x]:
                 header_arr = features[query][x]['header']
                 for header in header_arr:
                     header_vec = vector_sum(header_vec, vector_from_text(qitem, header))
+                    header_win = min([header_win, compute_window(qitem, header.split())])
             # body
             body_vec = [0] * len(qitem)
+            body_win = float("inf")
             if 'body_hits' in features[query][x]:
                 body = features[query][x]['body_hits']
                 body_vec = [len(body.setdefault(item, [])) for item in qitem]
+                body_win = compute_body_window(qitem, body)
             # achors
             anchor_vec = [0] * len(qitem)
+            anchor_win = float("inf")
             if 'anchors' in features[query][x]:
                 anchor = features[query][x]['anchors']
                 for key in anchor:
                     anchor_vec = vector_sum(anchor_vec, [anchor[key] * u for u in vector_from_text(qitem, key)])
+                    anchor_win = min([anchor_win, compute_window(qitem, key.split())])
+            # window size
+            WIN = min([title_win, header_win, url_win, body_win, anchor_win])
             # length normalization
-            norm = int(features[query][x]['body_length']) + 400
-            dvec = weight_average([title_vec, header_vec, url_vec, body_vec, anchor_vec], norm)
-            feat[x] = vector_dot_product(qvec, dvec)
+            norm = int(features[query][x]['body_length']) + 500
+            # Boosted score
+            feat[x] = boosted_weighted_score([title_vec, header_vec, url_vec, body_vec, anchor_vec], norm, qvec, WIN)
+            
         rankedQueries[query] = [u[0] for u in sorted(feat.items(), key=lambda x:x[1], reverse=True)]
     return rankedQueries
 
@@ -372,8 +436,9 @@ def main(featureFile):
 
     #calling baseline ranking system, replace with yours
     #rankedQueries = baseline(queries, features)
-    #rankedQueries = task1(queries, features, term_doc_freq)
-    rankedQueries = task2(queries, features, term_doc_freq)
+    rankedQueries = task1(queries, features, term_doc_freq)
+    #rankedQueries = task2(queries, features, term_doc_freq)
+    #rankedQueries = task3(queries, features, term_doc_freq)
     print >> sys.stderr, sum([len(rankedQueries[u]) for u in rankedQueries])
     
     #print ranked results to file
